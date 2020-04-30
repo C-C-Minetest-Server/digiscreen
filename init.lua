@@ -80,6 +80,7 @@ minetest.register_node("digiscreen:digiscreen",{
 		type = "fixed",
 		fixed = {-0.5,-0.5,0.4,0.5,0.5,0.5},
 	},
+	_digistuff_channelcopier_fieldname = "channel",
 	light_source = 10,
 	on_construct = function(pos)
 		local meta = minetest.get_meta(pos)
