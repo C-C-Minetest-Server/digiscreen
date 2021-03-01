@@ -106,6 +106,46 @@ minetest.register_node("digiscreen:digiscreen",{
 		local meta = minetest.get_meta(pos)
 		meta:set_string("channel",fields.channel)
 	end,
+	on_punch = function(screenpos,_,player)
+		if player and not player.is_fake_player then
+			local eyepos = vector.add(player:get_pos(),vector.add(player:get_eye_offset(),vector.new(0,1.5,0)))
+			local lookdir = player:get_look_dir()
+			local distance = vector.distance(eyepos,screenpos)
+			local endpos = vector.add(eyepos,vector.multiply(lookdir,distance+1))
+			local ray = minetest.raycast(eyepos,endpos,true,false)
+			local pointed,screen,hitpos
+			repeat
+				pointed = ray:next()
+				if pointed and pointed.type == "node" then
+					local node = minetest.get_node(pointed.under)
+					if node.name == "digiscreen:digiscreen" then
+						screen = pointed.under
+						hitpos = vector.subtract(pointed.intersection_point,screen)
+					end
+				end
+			until screen or not pointed
+			if not hitpos then return end
+			local facedir = minetest.facedir_to_dir(minetest.get_node(screen).param2)
+			if facedir.x > 0 then
+				hitpos.x = -1*hitpos.z
+			elseif facedir.x < 0 then
+				hitpos.x = hitpos.z
+			elseif facedir.z < 0 then
+				hitpos.x = -1*hitpos.x
+			end
+			hitpos.y = -1*hitpos.y
+			local hitpixel = {}
+			hitpixel.x = math.floor((hitpos.x+0.5)*16+0.5)+1
+			hitpixel.y = math.floor((hitpos.y+0.5)*16+0.5)+1
+			if hitpixel.x < 1 or hitpixel.x > 16 or hitpixel.y < 1 or hitpixel.y > 16 then return end
+			local message = {
+				x = hitpixel.x,
+				y = hitpixel.y,
+				player = player:get_player_name(),
+			}
+			digilines.receptor_send(screenpos,digilines.rules.default,minetest.get_meta(screenpos):get_string("channel"),message)
+		end
+	end,
 	digiline = {
 		wire = {
 			rules = digiline.rules.default,

@@ -5,6 +5,7 @@ How to use:
 1. Place one and set the channel
 2. Send an image (see below for the format)
 3. Image will be displayed on the screen
+4. If the screen is clicked, the screen will send a message on its channel containing the X and Y positions of the click and the name of the player.
 
 
 
