@@ -18,32 +18,15 @@ local function generateTexture(pos,serdata)
 		minetest.log("error","[digiscreen] Failed to deserialize display data at "..minetest.pos_to_string(pos,0))
 		return
 	end
+	local bincolors = ""
 	for y=1,16,1 do
-		if type(data[y]) ~= "table" then
-			minetest.log("error","[digiscreen] Invalid row "..y.." at "..minetest.pos_to_string(pos,0))
-			return
-		end
+		if type(data[y]) ~= "table" then data[y] = {} end
 		for x=1,16,1 do
-			if type(data[y][x]) ~= "string" or string.len(data[y][x]) ~= 6 then
-				minetest.log("error","[digiscreen] Missing/wrong length display data for X="..x.." Y="..y.." at "..minetest.pos_to_string(pos,0))
-				return
-			end
-			for i=1,6,1 do
-				if not tonumber(string.sub(data[y][x],i,i),16) then
-					minetest.log("error","[digiscreen] Invalid digit in display data for X="..x.." Y="..y.." at "..minetest.pos_to_string(pos,0))
-					return
-				end
-			end
+			bincolors = bincolors..minetest.colorspec_to_bytes(data[y][x] or "000000")
 		end
 	end
-	
-	local ret = "[combine:16x16"
-	for y=1,16,1 do
-		for x=1,16,1 do
-			ret = ret..string.format(":%d,%d=(digiscreen_pixel.png\\^[colorize\\:#%s\\:255)",x-1,y-1,data[y][x])
-		end
-	end
-	return ret
+	local img = minetest.encode_png(16,16,bincolors,0)
+	return "[png:"..minetest.encode_base64(img)
 end
 
 local function updateDisplay(pos)
