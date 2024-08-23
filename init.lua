@@ -22,7 +22,12 @@ local function generateTexture(pos,serdata)
 	for y=1,16,1 do
 		if type(data[y]) ~= "table" then data[y] = {} end
 		for x=1,16,1 do
-			bincolors = bincolors..minetest.colorspec_to_bytes(data[y][x] or "000000")
+			local colorspec = 0
+			if data[y][x] then
+				colorspec = tonumber(data[y][x],16) or 0
+			end
+			colorspec = 0xFF000000 + colorspec
+			bincolors = bincolors..minetest.colorspec_to_bytes(colorspec)
 		end
 	end
 	local img = minetest.encode_png(16,16,bincolors,0)
