@@ -136,7 +136,7 @@ minetest.register_node("digiscreen:digiscreen",{
 	end,
 	digiline = {
 		wire = {
-			rules = digiline.rules.default,
+			rules = digilines.rules.default,
 		},
 		effector = {
 			action = function(pos,_,channel,msg)
