@@ -1,5 +1,7 @@
-local function removeEntity(pos)
-	local entitiesNearby = minetest.get_objects_inside_radius(pos,0.5)
+digiscreen = {}
+
+function digiscreen.removeEntity(pos)
+	local entitiesNearby = core.get_objects_inside_radius(pos,0.5)
 	for _,i in pairs(entitiesNearby) do
 		if i:get_luaentity() and i:get_luaentity().name == "digiscreen:image" then
 			i:remove()
@@ -7,16 +9,24 @@ local function removeEntity(pos)
 	end
 end
 
-local function generateTexture(pos,serdata)
-	--The data *should* always be valid, but it pays to double-check anyway due to how easily this could crash if something did go wrong
-	if type(serdata) ~= "string" then
-		minetest.log("error","[digiscreen] Serialized display data appears to be missing at "..minetest.pos_to_string(pos,0))
-		return
-	end
-	local data = minetest.deserialize(serdata)
-	if type(data) ~= "table" then
-		minetest.log("error","[digiscreen] Failed to deserialize display data at "..minetest.pos_to_string(pos,0))
-		return
+function digiscreen.processDigilinesMessage(pos,msg)
+	local data = {}
+	for y=1,16,1 do
+		data[y] = {}
+		if type(msg[y]) ~= "table" then msg[y] = {} end
+		for x=1,16,1 do
+			if type(msg[y][x]) == "string" and string.len(msg[y][x]) == 7 and string.sub(msg[y][x],1,1) == "#" then
+				msg[y][x] = string.sub(msg[y][x],2,-1)
+			end
+			if type(msg[y][x]) ~= "string" or string.len(msg[y][x]) ~= 6 then msg[y][x] = "000000" end
+			msg[y][x] = string.upper(msg[y][x])
+			for i=1,6,1 do
+				if not tonumber(string.sub(msg[y][x],i,i),16) then
+					msg[y][x] = "000000"
+				end
+			end
+			data[y][x] = msg[y][x]
+		end
 	end
 	local bincolors = ""
 	for y=1,16,1 do
@@ -27,27 +37,43 @@ local function generateTexture(pos,serdata)
 				colorspec = tonumber(data[y][x],16) or 0
 			end
 			colorspec = 0xFF000000 + colorspec
-			bincolors = bincolors..minetest.colorspec_to_bytes(colorspec)
+			bincolors = bincolors..core.colorspec_to_bytes(colorspec)
 		end
 	end
-	local img = minetest.encode_png(16,16,bincolors,0)
-	return "[png:"..minetest.encode_base64(img)
+	local img = core.encode_png(16,16,bincolors,0)
+	return pos,"[png:"..core.encode_base64(img)
 end
 
-local function updateDisplay(pos)
-	removeEntity(pos)
-	local meta = minetest.get_meta(pos)
-	local data = meta:get_string("data")
-	local entity = minetest.add_entity(pos,"digiscreen:image")
-	local fdir = minetest.facedir_to_dir(minetest.get_node(pos).param2)
-	local etex = "digiscreen_pixel.png"
-	etex = generateTexture(pos,data) or etex
-	entity:set_properties({textures={etex}})
+function digiscreen.updateDisplay(pos)
+	digiscreen.removeEntity(pos)
+	local meta = core.get_meta(pos)
+	local texture = meta:get_string("texture")
+	if (not texture) or texture == "" then
+		local oldData = meta:get_string("data")
+		if oldData and string.len(oldData) > 1 then
+			oldData = core.deserialize(oldData)
+			if not oldData then return end
+			core.handle_async(digiscreen.processDigilinesMessage,digiscreen.asyncDone,pos,oldData)
+			return
+		end
+	end
+	local entity = core.add_entity(pos,"digiscreen:image")
+	local fdir = core.facedir_to_dir(core.get_node(pos).param2)
+	entity:set_properties({textures={texture}})
 	entity:set_yaw((fdir.x ~= 0) and math.pi/2 or 0)
 	entity:set_pos(vector.add(pos,vector.multiply(fdir,0.39)))
 end
 
-minetest.register_entity("digiscreen:image",{
+function digiscreen.asyncDone(pos,texture)
+	local node = core.get_node(pos)
+	if node.name ~= "digiscreen:digiscreen" then return end
+	local meta = core.get_meta(pos)
+	meta:set_string("data","")
+	meta:set_string("texture",texture)
+	digiscreen.updateDisplay(pos)
+end
+
+core.register_entity("digiscreen:image",{
 	initial_properties = {
 		visual = "upright_sprite",
 		physical = false,
@@ -56,13 +82,13 @@ minetest.register_entity("digiscreen:image",{
 	},
 })
 
-minetest.register_node("digiscreen:digiscreen",{
+core.register_node("digiscreen:digiscreen",{
 	description = "Digilines Graphical Display",
 	tiles = {"digiscreen_pixel.png",},
 	groups = {cracky = 3,},
 	paramtype = "light",
 	paramtype2 = "facedir",
-	on_rotate = minetest.global_exists("screwdriver") and screwdriver.rotate_simple,
+	on_rotate = core.global_exists("screwdriver") and screwdriver.rotate_simple,
 	drawtype = "nodebox",
 	node_box = {
 		type = "fixed",
@@ -71,7 +97,7 @@ minetest.register_node("digiscreen:digiscreen",{
 	_digistuff_channelcopier_fieldname = "channel",
 	light_source = 10,
 	on_construct = function(pos)
-		local meta = minetest.get_meta(pos)
+		local meta = core.get_meta(pos)
 		meta:set_string("formspec","field[channel;Channel;${channel}]")
 		local disp = {}
 		for y=1,16,1 do
@@ -80,18 +106,18 @@ minetest.register_node("digiscreen:digiscreen",{
 				disp[y][x] = "000000"
 			end
 		end
-		meta:set_string("data",minetest.serialize(disp))
-		updateDisplay(pos)
+		meta:set_string("data",core.serialize(disp))
+		digiscreen.updateDisplay(pos)
 	end,
-	on_destruct = removeEntity,
+	on_destruct = digiscreen.removeEntity,
 	on_receive_fields = function(pos,_,fields,sender)
 		local name = sender:get_player_name()
 		if not fields.channel then return end
-		if minetest.is_protected(pos,name) and not minetest.check_player_privs(name,"protection_bypass") then
-			minetest.record_protection_violation(pos,name)
+		if core.is_protected(pos,name) and not core.check_player_privs(name,"protection_bypass") then
+			core.record_protection_violation(pos,name)
 			return
 		end
-		local meta = minetest.get_meta(pos)
+		local meta = core.get_meta(pos)
 		meta:set_string("channel",fields.channel)
 	end,
 	on_punch = function(screenpos,_,player)
@@ -100,12 +126,12 @@ minetest.register_node("digiscreen:digiscreen",{
 			local lookdir = player:get_look_dir()
 			local distance = vector.distance(eyepos,screenpos)
 			local endpos = vector.add(eyepos,vector.multiply(lookdir,distance+1))
-			local ray = minetest.raycast(eyepos,endpos,true,false)
+			local ray = core.raycast(eyepos,endpos,true,false)
 			local pointed,screen,hitpos
 			repeat
 				pointed = ray:next()
 				if pointed and pointed.type == "node" then
-					local node = minetest.get_node(pointed.under)
+					local node = core.get_node(pointed.under)
 					if node.name == "digiscreen:digiscreen" then
 						screen = pointed.under
 						hitpos = vector.subtract(pointed.intersection_point,screen)
@@ -113,7 +139,7 @@ minetest.register_node("digiscreen:digiscreen",{
 				end
 			until screen or not pointed
 			if not hitpos then return end
-			local facedir = minetest.facedir_to_dir(minetest.get_node(screen).param2)
+			local facedir = core.facedir_to_dir(core.get_node(screen).param2)
 			if facedir.x > 0 then
 				hitpos.x = -1*hitpos.z
 			elseif facedir.x < 0 then
@@ -131,7 +157,7 @@ minetest.register_node("digiscreen:digiscreen",{
 				y = hitpixel.y,
 				player = player:get_player_name(),
 			}
-			digilines.receptor_send(screenpos,digilines.rules.default,minetest.get_meta(screenpos):get_string("channel"),message)
+			digilines.receptor_send(screenpos,digilines.rules.default,core.get_meta(screenpos):get_string("channel"),message)
 		end
 	end,
 	digiline = {
@@ -140,47 +166,31 @@ minetest.register_node("digiscreen:digiscreen",{
 		},
 		effector = {
 			action = function(pos,_,channel,msg)
-				local meta = minetest.get_meta(pos)
+				local meta = core.get_meta(pos)
 				local setchan = meta:get_string("channel")
 				if type(msg) ~= "table" or setchan ~= channel then return end
-				local data = {}
-				for y=1,16,1 do
-					data[y] = {}
-					if type(msg[y]) ~= "table" then msg[y] = {} end
-					for x=1,16,1 do
-						if type(msg[y][x]) == "string" and string.len(msg[y][x]) == 7 and string.sub(msg[y][x],1,1) == "#" then
-							msg[y][x] = string.sub(msg[y][x],2,-1)
-						end
-						if type(msg[y][x]) ~= "string" or string.len(msg[y][x]) ~= 6 then msg[y][x] = "000000" end
-						msg[y][x] = string.upper(msg[y][x])
-						for i=1,6,1 do
-							if not tonumber(string.sub(msg[y][x],i,i),16) then
-								msg[y][x] = "000000"
-							end
-						end
-						data[y][x] = msg[y][x]
-					end
-				end
-				meta:set_string("data",minetest.serialize(data))
-				updateDisplay(pos)
+				core.handle_async(digiscreen.processDigilinesMessage,digiscreen.asyncDone,pos,msg)
 			end,
 		},
 	},
 })
 
-minetest.register_lbm({
+core.register_lbm({
 	name = "digiscreen:respawn",
-	label = "Respawn digiscreen entities",
+	label = "Respawn/upgrade digiscreen entities",
 	nodenames = {"digiscreen:digiscreen"},
 	run_at_every_load = true,
-	action = updateDisplay,
+	action = digiscreen.updateDisplay,
 })
 
-minetest.register_craft({
+local luacontroller = "mesecons_luacontroller:luacontroller0000"
+local rgblightstone = "rgblightstone:rgblightstone_truecolor_0"
+
+core.register_craft({
 	output = "digiscreen:digiscreen",
 	recipe = {
-		{"mesecons_luacontroller:luacontroller0000","rgblightstone:rgblightstone_truecolor_0","rgblightstone:rgblightstone_truecolor_0",},
-		{"rgblightstone:rgblightstone_truecolor_0","rgblightstone:rgblightstone_truecolor_0","rgblightstone:rgblightstone_truecolor_0",},
-		{"rgblightstone:rgblightstone_truecolor_0","rgblightstone:rgblightstone_truecolor_0","rgblightstone:rgblightstone_truecolor_0",},
+		{luacontroller,rgblightstone,rgblightstone,},
+		{rgblightstone,rgblightstone,rgblightstone,},
+		{rgblightstone,rgblightstone,rgblightstone,},
 	},
 })

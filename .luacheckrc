@@ -1,7 +1,8 @@
-max_line_length = 160
-
+globals = {
+	"digiscreen",
+}
 read_globals = {
-	"minetest",
+	"core",
 	"vector",
 	"digilines",
 	"screwdriver",
