@@ -79,6 +79,9 @@ core.register_entity("digiscreen:image",{
 		physical = false,
 		collisionbox = {0,0,0,0,0,0,},
 		textures = {"digiscreen_pixel.png",},
+		glow = 14,
+		shaded = true,
+		static_save = false,
 	},
 })
 
