@@ -71,6 +71,7 @@ function digiscreen.asyncDone(pos,texture,bincolors)
 	meta:set_string("data","")
 	meta:set_string("bincolors",bincolors)
 	meta:set_string("texture",texture)
+	meta:mark_as_private({"data","bincolors","texture"})
 	digiscreen.updateDisplay(pos)
 	core.get_node_timer(pos):start(5)
 end
@@ -88,6 +89,7 @@ function digiscreen.recompressDone(ok,pos,texture)
 	local meta = core.get_meta(pos)
 	meta:set_string("bincolors","")
 	meta:set_string("texture",texture)
+	meta:mark_as_private({"bincolors","texture"})
 	digiscreen.updateDisplay(pos)
 end
 
@@ -128,6 +130,7 @@ core.register_node("digiscreen:digiscreen",{
 			end
 		end
 		meta:set_string("data",core.serialize(disp))
+		meta:mark_as_private("data")
 		digiscreen.updateDisplay(pos)
 	end,
 	on_destruct = digiscreen.removeEntity,
