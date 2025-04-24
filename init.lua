@@ -40,8 +40,8 @@ function digiscreen.processDigilinesMessage(pos,msg)
 			bincolors = bincolors..core.colorspec_to_bytes(colorspec)
 		end
 	end
-	local img = core.encode_png(16,16,bincolors,0)
-	return pos,"[png:"..core.encode_base64(img)
+	local img = core.encode_png(16,16,bincolors,1)
+	return pos,"[png:"..core.encode_base64(img),bincolors
 end
 
 function digiscreen.updateDisplay(pos)
@@ -64,11 +64,29 @@ function digiscreen.updateDisplay(pos)
 	entity:set_pos(vector.add(pos,vector.multiply(fdir,0.39)))
 end
 
-function digiscreen.asyncDone(pos,texture)
+function digiscreen.asyncDone(pos,texture,bincolors)
 	local node = core.get_node(pos)
 	if node.name ~= "digiscreen:digiscreen" then return end
 	local meta = core.get_meta(pos)
 	meta:set_string("data","")
+	meta:set_string("bincolors",bincolors)
+	meta:set_string("texture",texture)
+	digiscreen.updateDisplay(pos)
+	core.get_node_timer(pos):start(5)
+end
+
+function digiscreen.recompress(pos,bincolors)
+	if string.len(bincolors) ~= 1024 then return false end
+	local img = core.encode_png(16,16,bincolors,9)
+	return true,pos,"[png:"..core.encode_base64(img)
+end
+
+function digiscreen.recompressDone(ok,pos,texture)
+	if not ok then return end
+	local node = core.get_node(pos)
+	if node.name ~= "digiscreen:digiscreen" then return end
+	local meta = core.get_meta(pos)
+	meta:set_string("bincolors","")
 	meta:set_string("texture",texture)
 	digiscreen.updateDisplay(pos)
 end
@@ -162,6 +180,10 @@ core.register_node("digiscreen:digiscreen",{
 			}
 			digilines.receptor_send(screenpos,digilines.rules.default,core.get_meta(screenpos):get_string("channel"),message)
 		end
+	end,
+	on_timer = function(pos)
+		local bincolors = core.get_meta(pos):get_string("bincolors")
+		if string.len(bincolors) > 0 then core.handle_async(digiscreen.recompress,digiscreen.recompressDone,pos,bincolors) end
 	end,
 	digiline = {
 		wire = {
