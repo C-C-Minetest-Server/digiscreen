@@ -138,7 +138,7 @@ function digiscreen.on_punch(screenpos,_,player)
 			pointed = ray:next()
 			if pointed and pointed.type == "node" then
 				local node = core.get_node(pointed.under)
-				if node.name == "digiscreen:digiscreen" then
+				if node.name == "digiscreen:digiscreen" or node.name == "digiscreen:digiscreen_big" then
 					screen = pointed.under
 					hitpos = vector.subtract(pointed.intersection_point,screen)
 				end
