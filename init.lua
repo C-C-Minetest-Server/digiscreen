@@ -11,34 +11,27 @@ end
 
 function digiscreen.processDigilinesMessage(pos,msg,size)
 	if (not size) or size < 1 then size = 16 end
-	local data = {}
-	for y=1,size,1 do
-		data[y] = {}
+	local offset_x = msg.offset_x or 0
+	local offset_y = msg.offset_y or 0
+	local bincolors = ""
+	for y=1 + offset_y,size + offset_y,1 do
 		if type(msg[y]) ~= "table" then msg[y] = {} end
-		for x=1,size,1 do
-			if type(msg[y][x]) == "string" and string.len(msg[y][x]) == 7 and string.sub(msg[y][x],1,1) == "#" then
-				msg[y][x] = string.sub(msg[y][x],2,-1)
-			end
-			if type(msg[y][x]) ~= "string" or string.len(msg[y][x]) ~= 6 then msg[y][x] = "000000" end
-			msg[y][x] = string.upper(msg[y][x])
-			for i=1,6,1 do
-				if not tonumber(string.sub(msg[y][x],i,i),16) then
-					msg[y][x] = "000000"
+		for x=1 + offset_x,size + offset_x,1 do
+			local bit_value = msg[y][x] or 0
+			local bit_type = type(bit_value)
+			if bit_type == "string" then
+				if string.len(bit_value) == 7 and string.sub(bit_value,1,1) == "#" then
+					bit_value = string.sub(bit_value, 2, -1)
+				end
+
+				bit_value = tonumber(bit_value,16) or 0
+			elseif bit_type == "number" then
+				if bit_value < 0 or bit_value > 0xFFFFFF or math.floor(bit_value) ~= bit_value then
+					bit_value = 0
 				end
 			end
-			data[y][x] = msg[y][x]
-		end
-	end
-	local bincolors = ""
-	for y=1,size,1 do
-		if type(data[y]) ~= "table" then data[y] = {} end
-		for x=1,size,1 do
-			local colorspec = 0
-			if data[y][x] then
-				colorspec = tonumber(data[y][x],16) or 0
-			end
-			colorspec = 0xFF000000 + colorspec
-			bincolors = bincolors..core.colorspec_to_bytes(colorspec)
+
+			bincolors = bincolors..core.colorspec_to_bytes(0xFF000000 + bit_value)
 		end
 	end
 	local img = core.encode_png(size,size,bincolors,1)
