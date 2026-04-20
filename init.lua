@@ -213,7 +213,7 @@ function digiscreen.on_digilines(pos, node, channel, msg)
     local specs = {}
 
     for y = 1, count_h do
-        local row_first_pos = vector.new(pos.x, pos.y + y - 1, pos.z)
+        local row_first_pos = vector.new(pos.x, pos.y - y + 1, pos.z)
         local row_first_node = core.get_node(row_first_pos)
         if row_first_node.name ~= name then break end
         specs[#specs + 1] = {
