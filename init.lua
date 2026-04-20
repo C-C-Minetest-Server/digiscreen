@@ -254,6 +254,22 @@ function digiscreen.sync_on_punch(pos, node, player)
     if not player:is_player() then return end
     local pname = player:get_player_name()
 
+    if sync_pairing[pname] then
+        -- Perhaps they are looking to copy this one's settings
+
+        local meta = core.get_meta(pos)
+        local src_text = meta:get_string("sync_src")
+        if src_text ~= "" then
+            local src = core.string_to_pos(src_text)
+            local src_node = core.get_node(src)
+            if core.get_item_group(src_node.name, "digiscreen") ~= 0 then
+                digiscreen.sync_connect(pname, src, sync_pairing[pname])
+                sync_pairing[pname] = nil
+                return
+            end
+        end
+    end
+
     sync_pairing[pname] = pos
     core.chat_send_player(pname, S("Punch a digiscreen to connect."))
 end
