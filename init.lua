@@ -169,13 +169,37 @@ function digiscreen.on_timer(pos)
 	end
 end
 
+function digiscreen.show_content(pos, content)
+	local meta = core.get_meta(pos)
+	local size = meta:get_int("size")
+	if (not size) or size < 1 then size = 16 end
+
+	core.handle_async(digiscreen.processDigilinesMessage,digiscreen.asyncDone,pos,content,size)
+end
+
 function digiscreen.on_digilines(pos,_,channel,msg)
 	local meta = core.get_meta(pos)
 	local setchan = meta:get_string("channel")
 	if type(msg) ~= "table" or setchan ~= channel then return end
-	local size = meta:get_int("size")
-	if (not size) or size < 1 then size = 16 end
-	core.handle_async(digiscreen.processDigilinesMessage,digiscreen.asyncDone,pos,msg,size)
+
+	if msg.batch then
+		local node = core.get_node(pos)
+		local back_dir = core.facedir_to_dir(node.param2)
+		local right = vector.rotate(back_dir, {x = 0, y = -math.pi/2, z = 0})
+		for offset_y, row in ipairs(msg) do
+			for offset_x, sub_msg in ipairs(row) do
+				if not sub_msg.batch then -- prevent infinite loops
+					local new_pos = vector.add(pos, vector.multiply(right, offset_x - 1))
+					new_pos.y = new_pos.y - offset_y + 1
+
+					digiscreen.show_content(new_pos, sub_msg)
+				end
+			end
+		end
+		return
+	end
+
+	digiscreen.show_content(pos, msg)
 end
 
 core.register_entity("digiscreen:image",{
