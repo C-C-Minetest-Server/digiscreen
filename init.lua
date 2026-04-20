@@ -332,16 +332,21 @@ function digiscreen.sync_fire(src)
 
     for hash in pairs(src_syncs) do
         local dst = core.get_position_from_hash(hash)
-        local dst_meta = core.get_meta(dst)
-        local dst_sync_src = dst_meta:get_string("sync_src")
-        
-        if dst_sync_src == src_text then
-            dst_meta:set_string("texture", texture)
-            dst_meta:mark_as_private("texture")
-
-            digiscreen.sync_update(dst, texture)
-        else
+        local dst_node = core.get_node_or_nil(dst)
+        if dst_node and core.get_item_group(dst_node.name, "digiscreen") == 0 then
             src_syncs[hash] = nil
+        elseif dst_node then
+            local dst_meta = core.get_meta(dst)
+            local dst_sync_src = dst_meta:get_string("sync_src")
+
+            if dst_sync_src == src_text then
+                dst_meta:set_string("texture", texture)
+                dst_meta:mark_as_private("texture")
+
+                digiscreen.sync_update(dst, texture)
+            else
+                src_syncs[hash] = nil
+            end
         end
     end
 
