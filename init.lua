@@ -6,6 +6,8 @@ core.register_async_dofile(core.get_modpath("digiscreen") .. "/async.lua")
 
 local handle_async = core.handle_async
 
+local sync_pairing = {}
+
 function digiscreen.split_and_render_multi_callback(resp)
     for _, data in ipairs(resp) do
         local pos = data.pos
@@ -19,7 +21,7 @@ function digiscreen.split_and_render_multi_callback(resp)
         meta:set_string("data", "")
         meta:set_string("bincolors", bincolors)
         meta:set_string("texture", "[png:" .. encoded)
-        meta:mark_as_private({ "data", "bincolors", "texture" })
+        meta:mark_as_private({ "data", "bincolors", "texture", "sync" })
 
         digiscreen.update_display(pos)
         core.get_node_timer(pos):start(5)
@@ -36,7 +38,7 @@ function digiscreen.recompress_callback(pos, encoded)
     meta:set_string("data", "")
     meta:set_string("bincolors", "")
     meta:set_string("texture", "[png:" .. encoded)
-    meta:mark_as_private({ "data", "texture" })
+    meta:mark_as_private({ "data", "texture", "sync" })
 
     digiscreen.update_display(pos)
 end
@@ -83,6 +85,7 @@ function digiscreen.update_display(pos)
     obj:set_properties({ textures = { texture } })
     obj:set_yaw((fdir.x ~= 0) and math.pi / 2 or 0)
     obj:set_pos(vector.add(pos, vector.multiply(fdir, 0.39)))
+    digiscreen.sync_fire(pos)
 end
 
 function digiscreen.on_construct(pos, size)
@@ -129,6 +132,13 @@ function digiscreen.on_punch(screenpos, _, player)
     local size = meta:get_int("size")
     if (not size) or size < 1 then size = 16 end
     if player and not player.is_fake_player then
+        local pname = player:get_player_name()
+        if sync_pairing[pname] then
+            digiscreen.sync_connect(pname, screenpos, sync_pairing[pname])
+            sync_pairing[pname] = nil
+            return
+        end
+
         local eyepos = vector.add(player:get_pos(), vector.add(player:get_eye_offset(), vector.new(0, 1.5, 0)))
         local lookdir = player:get_look_dir()
         local distance = vector.distance(eyepos, screenpos)
@@ -233,6 +243,115 @@ function digiscreen.on_digilines(pos, node, channel, msg)
     )
 end
 
+-- Synchronizer
+
+function digiscreen.sync_on_construct(pos)
+    local meta = core.get_meta(pos)
+    meta:set_string("infotext", S("Unpaired Digscreen Synchronizer, punch to connect"))
+end
+
+function digiscreen.sync_on_punch(pos, node, player)
+    if not player:is_player() then return end
+    local pname = player:get_player_name()
+
+    sync_pairing[pname] = pos
+    core.chat_send_player(pname, S("Punch a digiscreen to connect."))
+end
+
+function digiscreen.sync_update(pos, texture)
+    if not texture then
+        local meta = core.get_meta(pos)
+        texture = meta:get_string("texture")
+    end
+
+    local obj
+
+    do
+        local objs = core.get_objects_inside_radius(pos, 0.5)
+        for _, i in ipairs(objs) do
+            if i:get_luaentity() and i:get_luaentity().name == "digiscreen:image" then
+                if obj then
+                    i:remove()
+                else
+                    obj = i
+                end
+            end
+        end
+    end
+
+    if not obj then
+        obj = core.add_entity(pos, "digiscreen:image")
+    end
+
+    local fdir = core.facedir_to_dir(core.get_node(pos).param2)
+    obj:set_properties({ textures = { texture } })
+    obj:set_yaw((fdir.x ~= 0) and math.pi / 2 or 0)
+    obj:set_pos(vector.add(pos, vector.multiply(fdir, 0.39)))
+end
+
+function digiscreen.sync_connect(pname, src, dst)
+    local dst_node = core.get_node(dst)
+    if dst_node.name ~= "digiscreen:sync" then
+        core.chat_send_player(pname, S("Synchronizer no longer exists."))
+        return false
+    end
+
+    local src_meta = core.get_meta(src)
+    local dst_meta = core.get_meta(dst)
+
+    local src_syncs = src_meta:get_string("sync")
+    if src_syncs == "" then
+        src_syncs = {}
+    else
+        src_syncs = core.deserialize(src_syncs) or {}
+    end
+
+    src_syncs[core.hash_node_position(dst)] = true
+
+    src_meta:set_string("sync", core.serialize(src_syncs))
+    src_meta:mark_as_private({ "data", "texture", "sync" })
+
+    dst_meta:set_string("sync_src", core.pos_to_string(src))
+    dst_meta:mark_as_private("sync_src")
+
+    local src_txt = core.pos_to_string(src)
+    dst_meta:set_string("infotext", S("Connected Digscreen Synchronizer @1", src_txt))
+    
+    core.chat_send_player(pname, S("Successfully linked @1 to @2.",
+        core.pos_to_string(dst), src_txt))
+end
+
+function digiscreen.sync_fire(src)
+    local src_meta = core.get_meta(src)
+    local src_text = core.pos_to_string(src)
+    local texture = src_meta:get_string("texture")
+    local src_syncs = src_meta:get_string("sync")
+
+    if src_syncs == "" or src_syncs == "return {}" then return end
+    src_syncs = core.deserialize(src_syncs) or {}
+
+    for hash in pairs(src_syncs) do
+        local dst = core.get_position_from_hash(hash)
+        local dst_meta = core.get_meta(dst)
+        local dst_sync_src = dst_meta:get_string("sync_src")
+        
+        if dst_sync_src == src_text then
+            dst_meta:set_string("texture", texture)
+            dst_meta:mark_as_private("texture")
+
+            digiscreen.sync_update(dst, texture)
+        else
+            src_syncs[hash] = nil
+        end
+    end
+
+    src_meta:set_string("sync", core.serialize(src_syncs))
+end
+
+core.register_on_leaveplayer(function(player)
+    sync_pairing[player:get_player_name()] = nil
+end)
+
 if _G.tracy then
     for name, func in pairs(digiscreen) do
         if type(func) == "function" then
@@ -323,12 +442,39 @@ core.register_node("digiscreen:digiscreen_big", {
     },
 })
 
+core.register_node("digiscreen:sync", {
+    description = S("Digilines Graphical Display Synchronizer"),
+    tiles = { "digiscreen_pixel.png", },
+    groups = { cracky = 3, digiscreen = 1, },
+    paramtype = "light",
+    paramtype2 = "facedir",
+    on_rotate = core.global_exists("screwdriver") and screwdriver.rotate_simple,
+    drawtype = "nodebox",
+    node_box = {
+        type = "fixed",
+        fixed = { -0.5, -0.5, 0.4, 0.5, 0.5, 0.5 },
+    },
+    light_source = 10,
+    on_construct = digiscreen.sync_on_construct,
+    on_destruct = digiscreen.on_destruct,
+    on_punch = digiscreen.sync_on_punch,
+})
+
+
 core.register_lbm({
     name = "digiscreen:respawn",
     label = "Respawn/upgrade digiscreen entities",
     nodenames = { "group:digiscreen", },
     run_at_every_load = true,
     action = digiscreen.update_display,
+})
+
+core.register_lbm({
+    name = "digiscreen:sync_respawn",
+    label = "Respawn/upgrade digiscreen sync entities",
+    nodenames = { "digiscreen:sync", },
+    run_at_every_load = true,
+    action = digiscreen.sync_update,
 })
 
 local luacontroller = "mesecons_luacontroller:luacontroller0000"
