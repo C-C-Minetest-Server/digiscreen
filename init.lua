@@ -1,5 +1,7 @@
 local S = core.get_translator("digiscreen")
 
+local s_byte, s_len = string.byte, string.len
+
 digiscreen = {}
 
 core.register_async_dofile(core.get_modpath("digiscreen") .. "/async.lua")
@@ -194,10 +196,30 @@ function digiscreen.on_timer(pos)
     end
 end
 
+local bit = bit
+local b_lshift = bit.lshift
+local b_bor = bit.bor
+
 function digiscreen.on_digilines(pos, node, channel, msg)
     local meta = core.get_meta(pos)
     local setchan = meta:get_string("channel")
-    if type(msg) ~= "table" or type(msg[1]) ~= "table" or setchan ~= channel then return end
+    if setchan ~= channel then return end
+
+    local bitmap_h
+    local bitmap_w
+    if type(msg) == "table" and type(msg[1]) == "table" then
+        bitmap_w = #msg[1]
+        bitmap_h = #msg
+    elseif type(msg) == "string" and msg:sub(1, 8) == "BUFBYTES" then
+        local w_hi, w_lo, h_hi, h_lo = s_byte(msg, 9, 12)
+        bitmap_w = b_bor(b_lshift(w_hi, 8), w_lo)
+        bitmap_h = b_bor(b_lshift(h_hi, 8), h_lo)
+
+        local expected_len = bitmap_w * bitmap_h * 3 + 12
+        if s_len(msg) ~= expected_len then return end
+    else
+        return
+    end
 
     local size = meta:get_int("size")
     if (not size) or size < 1 then size = 16 end
@@ -206,8 +228,6 @@ function digiscreen.on_digilines(pos, node, channel, msg)
     local right = vector.rotate(back_dir, { x = 0, y = -math.pi / 2, z = 0 })
 
     local name = node.name
-    local bitmap_h = #msg
-    local bitmap_w = #msg[1]
     local count_h = math.ceil(bitmap_h / size)
     local count_w = math.ceil(bitmap_w / size)
     local specs = {}
