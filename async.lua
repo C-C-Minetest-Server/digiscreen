@@ -56,7 +56,7 @@ end
 function digiscreen.recompress(pos, bincolors, size)
     if (not size) or size < 1 then size = 16 end
     if string.len(bincolors) ~= (size ^ 2) * 4 then return false end
-    return pos, core.encode_png(size, size, bincolors, 9)
+    return pos, core.encode_base64(core.encode_png(size, size, bincolors, 9))
 end
 
 if _G.tracy then
